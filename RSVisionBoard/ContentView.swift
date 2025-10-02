@@ -8,14 +8,48 @@
 import SwiftUI
 
 struct ContentView: View {
+    @StateObject private var viewModel = VisionBoardViewModel()
+    
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        NavigationSplitView {
+            VStack {
+                Text("Vision Board")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .padding()
+                
+                Text("Create and organize your vision board")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .padding()
+                
+                Spacer()
+                
+                Text("Items: \(viewModel.items.count)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .navigationTitle("Vision Board")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: {
+                        viewModel.addTextItem()
+                    }) {
+                        Label("Add Text", systemImage: "text.badge.plus")
+                    }
+                }
+                
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: {
+                        viewModel.addImageItem()
+                    }) {
+                        Label("Add Image", systemImage: "photo.badge.plus")
+                    }
+                }
+            }
+        } detail: {
+            VisionBoardCanvas(viewModel: viewModel)
         }
-        .padding()
     }
 }
 
