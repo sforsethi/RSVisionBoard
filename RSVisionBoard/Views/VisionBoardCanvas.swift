@@ -83,7 +83,8 @@ struct VisionBoardCanvas: View {
                 }
         )
     }
-    
+
+#if os(macOS)
     private func selectImageFromFilePicker() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
@@ -105,6 +106,7 @@ struct VisionBoardCanvas: View {
         }
         showingImagePicker = false
     }
+#endif
 }
 
 struct VisionBoardItemView: View {
@@ -116,101 +118,121 @@ struct VisionBoardItemView: View {
     @State private var tempText: String = ""
     
     var body: some View {
+        textOrImageContent
+            .shadow(color: .black.opacity(0.1), radius: 2, x: 1, y: 1)
+    }
+    
+    @ViewBuilder
+    private var textOrImageContent: some View {
+        if item.type == .text {
+            textContentView
+        } else {
+            imageContentView
+        }
+    }
+    
+    private var textContentView: some View {
         Group {
-            switch item.type {
-            case .text:
-                if isEditing {
-                    TextField("", text: $tempText, onCommit: {
-                        if let index = viewModel.items.firstIndex(where: { $0.id == item.id }) {
-                            viewModel.items[index].text = tempText
-                        }
-                        isEditing = false
-                    })
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .frame(width: item.size.width, height: item.size.height)
-                    .background(Color.yellow.opacity(0.2))
-                    .cornerRadius(8)
-                } else {
-                    Text(item.text)
-                        .frame(width: item.size.width, height: item.size.height)
-                        .background(Color.yellow.opacity(0.1))
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        )
-                        .onTapGesture {
-                            tempText = item.text
-                            isEditing = true
-                        }
-                }
-            case .image:
-  #if os(iOS)
-                if let imageData = item.imageData, let uiImage = UIImage(data: imageData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: item.size.width, height: item.size.height)
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        )
-                } else {
-                    // Placeholder for image
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: item.size.width, height: item.size.height)
-                        .cornerRadius(8)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .foregroundColor(.gray)
-                                .font(.title2)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        )
-                        .onTapGesture {
-                            selectedItemForImage = item
-                            showingImagePicker = true
-                        }
-                }
-#else
-                if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
-                    Image(nsImage: nsImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: item.size.width, height: item.size.height)
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        )
-                } else {
-                    // Placeholder for image
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: item.size.width, height: item.size.height)
-                        .cornerRadius(8)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .foregroundColor(.gray)
-                                .font(.title2)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        )
-                        .onTapGesture {
-                            selectedItemForImage = item
-                            showingImagePicker = true
-                        }
-                }
-#endif
+            if isEditing {
+                textFieldView
+            } else {
+                textView
             }
         }
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 1, y: 1)
+    }
+    
+    private var textFieldView: some View {
+        TextField("", text: $tempText, onCommit: {
+            if let index = viewModel.items.firstIndex(where: { $0.id == item.id }) {
+                viewModel.items[index].text = tempText
+            }
+            isEditing = false
+        })
+        .textFieldStyle(RoundedBorderTextFieldStyle())
+        .frame(width: item.size.width, height: item.size.height)
+        .background(Color.yellow.opacity(0.2))
+        .cornerRadius(8)
+    }
+    
+    private var textView: some View {
+        Text(item.text)
+            .frame(width: item.size.width, height: item.size.height)
+            .background(Color.yellow.opacity(0.1))
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+            )
+            .onTapGesture {
+                tempText = item.text
+                isEditing = true
+            }
+    }
+    
+    private var imageContentView: some View {
+        Group {
+            if item.imageData != nil {
+                imageView
+            } else {
+                placeholderView
+            }
+        }
+    }
+    
+#if os(iOS)
+    private var imageView: some View {
+        if let imageData = item.imageData, let uiImage = UIImage(data: imageData) {
+            return AnyView(
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: item.size.width, height: item.size.height)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                    )
+            )
+        }
+        return AnyView(EmptyView())
+    }
+#else
+    private var imageView: some View {
+        if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
+            return AnyView(
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: item.size.width, height: item.size.height)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                    )
+            )
+        }
+        return AnyView(EmptyView())
+    }
+#endif
+    
+    private var placeholderView: some View {
+        Rectangle()
+            .fill(Color.gray.opacity(0.2))
+            .frame(width: item.size.width, height: item.size.height)
+            .cornerRadius(8)
+            .overlay(
+                Image(systemName: "photo")
+                    .foregroundColor(.gray)
+                    .font(.title2)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+            )
+            .onTapGesture {
+                selectedItemForImage = item
+                showingImagePicker = true
+            }
     }
 }
 
@@ -280,6 +302,7 @@ struct ImagePicker: UIViewControllerRepresentable {
                     if let index = parent.viewModel.items.firstIndex(where: { $0.id == selectedItem.id }) {
                         let resizedImage = uiImage.resized(to: CGSize(width: 300, height: 300))
                         parent.viewModel.items[index].imageData = resizedImage.pngData()
+                        print("Image data set: \(parent.viewModel.items[index].imageData != nil)")
                     }
                 }
             }
