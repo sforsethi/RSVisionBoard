@@ -10,6 +10,8 @@ import Combine
 
 #if os(iOS)
 import UIKit
+import PhotosUI
+import Photos
 #else
 import AppKit
 import UniformTypeIdentifiers
@@ -18,8 +20,8 @@ import UniformTypeIdentifiers
 struct VisionBoardCanvas: View {
     @ObservedObject var viewModel: VisionBoardViewModel
     @State private var draggedItem: VisionBoardItem?
-    @State private var showingImagePicker = false
-    @State private var selectedItemForImage: VisionBoardItem?
+    @Binding var showingImagePicker: Bool
+    @State private var inputImage: UIImage?
     
     var body: some View {
         GeometryReader { geometry in
@@ -31,18 +33,36 @@ struct VisionBoardCanvas: View {
         }
 #if os(iOS)
         .sheet(isPresented: $showingImagePicker) {
-            ImagePicker(selectedItem: $selectedItemForImage, viewModel: viewModel)
+            ImagePicker(image: $inputImage)
         }
 #else
-        .alert("Select Image", isPresented: $showingImagePicker) {
-            Button("Cancel") { showingImagePicker = false }
-            Button("Choose") {
-                selectImageFromFilePicker()
-            }
-        } message: {
-            Text("Select an image file to add to your vision board")
+        .sheet(isPresented: $showingImagePicker) {
+            ImagePickerMac(image: $inputImage)
         }
 #endif
+        .onChange(of: inputImage) { image in
+            if let image = image {
+                print("📸 Image selected: \(image.size)")
+                
+                // Create a new vision board item with the image
+                let imageData = image.pngData()!
+                let originalSize = image.size
+                let scaledSize = CGSize(width: originalSize.width * 0.1, height: originalSize.height * 0.1)
+                
+                let newItem = VisionBoardItem(
+                    type: .image,
+                    text: "",
+                    imageData: imageData,
+                    position: CGSize(width: 100, height: 100),
+                    size: scaledSize,
+                    scale: 1.0
+                )
+                
+                viewModel.items.append(newItem)
+                print("✅ Added image to vision board")
+                inputImage = nil
+            }
+        }
     }
     
     private var backgroundView: some View {
@@ -64,11 +84,10 @@ struct VisionBoardCanvas: View {
         
         return VisionBoardItemView(
             item: item,
-            viewModel: viewModel,
-            showingImagePicker: $showingImagePicker,
-            selectedItemForImage: $selectedItemForImage
+            viewModel: viewModel
         )
         .position(itemCenter)
+        .id(item.id) // Force view refresh when item changes
         .gesture(
             DragGesture()
                 .onChanged { value in
@@ -83,43 +102,35 @@ struct VisionBoardCanvas: View {
                 }
         )
     }
-
-#if os(macOS)
-    private func selectImageFromFilePicker() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.allowedContentTypes = [.image]
-        
-        if panel.runModal() == .OK {
-            if let url = panel.url {
-                if let imageData = try? Data(contentsOf: url),
-                   let nsImage = NSImage(data: imageData) {
-                    if let selectedItem = selectedItemForImage {
-                        if let index = viewModel.items.firstIndex(where: { $0.id == selectedItem.id }) {
-                            let resizedImage = nsImage.resized(to: CGSize(width: 300, height: 300))
-                            viewModel.items[index].imageData = resizedImage.pngData()
-                        }
-                    }
-                }
-            }
-        }
-        showingImagePicker = false
-    }
-#endif
 }
 
 struct VisionBoardItemView: View {
     let item: VisionBoardItem
     let viewModel: VisionBoardViewModel
-    @Binding var showingImagePicker: Bool
-    @Binding var selectedItemForImage: VisionBoardItem?
     @State private var isEditing: Bool = false
     @State private var tempText: String = ""
+    @State private var currentScale: CGFloat = 1.0
     
     var body: some View {
         textOrImageContent
             .shadow(color: .black.opacity(0.1), radius: 2, x: 1, y: 1)
+            .id(item.imageData == nil ? "\(item.id)-empty" : "\(item.id)-filled")
+            .scaleEffect(item.type == .image ? currentScale : 1.0)
+            .gesture(
+                item.type == .image ? 
+                MagnificationGesture()
+                    .onChanged { value in
+                        currentScale = value
+                    }
+                    .onEnded { _ in
+                        viewModel.scaleItem(item, by: currentScale)
+                    }
+                : nil
+            )
+            .onAppear {
+                currentScale = item.scale
+                print("🎨 VisionBoardItemView appeared for item: \(item.id), type: \(item.type), hasImage: \(item.imageData != nil)")
+            }
     }
     
     @ViewBuilder
@@ -174,15 +185,15 @@ struct VisionBoardItemView: View {
             if item.imageData != nil {
                 imageView
             } else {
-                placeholderView
+                Color.clear
             }
         }
     }
     
 #if os(iOS)
     private var imageView: some View {
-        if let imageData = item.imageData, let uiImage = UIImage(data: imageData) {
-            return AnyView(
+        Group {
+            if let imageData = item.imageData, let uiImage = UIImage(data: imageData) {
                 Image(uiImage: uiImage)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -192,14 +203,21 @@ struct VisionBoardItemView: View {
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                     )
-            )
+                    .onAppear {
+                        print("🎨 Rendering image for item \(item.id): size=\(uiImage.size)")
+                    }
+            } else {
+                Color.clear
+                    .onAppear {
+                        print("❌ Could not render image for item \(item.id): imageData=\(item.imageData != nil)")
+                    }
+            }
         }
-        return AnyView(EmptyView())
     }
 #else
     private var imageView: some View {
-        if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
-            return AnyView(
+        Group {
+            if let imageData = item.imageData, let nsImage = NSImage(data: imageData) {
                 Image(nsImage: nsImage)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -209,32 +227,14 @@ struct VisionBoardItemView: View {
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                     )
-            )
+            } else {
+                Color.clear
+            }
         }
-        return AnyView(EmptyView())
     }
 #endif
     
-    private var placeholderView: some View {
-        Rectangle()
-            .fill(Color.gray.opacity(0.2))
-            .frame(width: item.size.width, height: item.size.height)
-            .cornerRadius(8)
-            .overlay(
-                Image(systemName: "photo")
-                    .foregroundColor(.gray)
-                    .font(.title2)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-            )
-            .onTapGesture {
-                selectedItemForImage = item
-                showingImagePicker = true
-            }
     }
-}
 
 struct GridPatternView: View {
     var body: some View {
@@ -264,21 +264,14 @@ struct GridPatternView: View {
 }
 
 #if os(iOS)
-// Image Picker View
+// Simple Image Picker View
 struct ImagePicker: UIViewControllerRepresentable {
-    @Binding var selectedItem: VisionBoardItem?
-    let viewModel: VisionBoardViewModel
+    @Binding var image: UIImage?
     @Environment(\.dismiss) private var dismiss
-    
-    init(selectedItem: Binding<VisionBoardItem?>, viewModel: VisionBoardViewModel) {
-        _selectedItem = selectedItem
-        self.viewModel = viewModel
-    }
     
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
         picker.delegate = context.coordinator
-        picker.sourceType = .photoLibrary
         return picker
     }
     
@@ -295,16 +288,9 @@ struct ImagePicker: UIViewControllerRepresentable {
             self.parent = parent
         }
         
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaInfo info: [UIImagePickerController.InfoKey : Any]) {
-            if let uiImage = info[.originalImage] as? UIImage {
-                // Update the selected item with the image data
-                if let selectedItem = parent.selectedItem {
-                    if let index = parent.viewModel.items.firstIndex(where: { $0.id == selectedItem.id }) {
-                        let resizedImage = uiImage.resized(to: CGSize(width: 300, height: 300))
-                        parent.viewModel.items[index].imageData = resizedImage.pngData()
-                        print("Image data set: \(parent.viewModel.items[index].imageData != nil)")
-                    }
-                }
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.image = image
             }
             parent.dismiss()
         }
@@ -343,6 +329,78 @@ extension NSImage {
             return nil
         }
         return data
+    }
+}
+
+// macOS Image Picker
+struct ImagePickerMac: View {
+    @Binding var image: UIImage?
+    @Binding var isPresented: Bool
+    @State private var selectedFile: URL?
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Select an Image")
+                .font(.title)
+            
+            Text("Choose an image file to add to your vision board")
+                .foregroundColor(.secondary)
+            
+            Button("Browse...") {
+                selectImageFromFile()
+            }
+            .buttonStyle(.borderedProminent)
+            
+            if selectedFile != nil {
+                Text("Selected: \(selectedFile?.lastPathComponent ?? "")")
+                    .foregroundColor(.secondary)
+            }
+            
+            HStack {
+                Button("Cancel") {
+                    isPresented = false
+                }
+                
+                Button("Choose") {
+                    if let url = selectedFile {
+                        loadImage(from: url)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(selectedFile == nil)
+            }
+        }
+        .padding(30)
+        .frame(width: 400, height: 250)
+    }
+    
+    private func selectImageFromFile() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.image]
+        
+        if panel.runModal() == .OK {
+            selectedFile = panel.url
+        }
+    }
+    
+    private func loadImage(from url: URL) {
+        print("📁 Loading image from: \(url)")
+        
+        if let imageData = try? Data(contentsOf: url),
+           let nsImage = NSImage(data: imageData) {
+            print("✅ Image loaded: \(nsImage.size)")
+            
+            // Convert NSImage to UIImage for consistency
+            if let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                let uiImage = UIImage(cgImage: cgImage)
+                image = uiImage
+                print("✅ Set image")
+            }
+        }
+        
+        isPresented = false
     }
 }
 #endif

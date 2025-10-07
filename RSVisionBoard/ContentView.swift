@@ -9,10 +9,11 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var viewModel = VisionBoardViewModel()
+    @State private var showingImagePicker = false
     
     var body: some View {
         NavigationView {
-            VisionBoardCanvas(viewModel: viewModel)
+            VisionBoardCanvas(viewModel: viewModel, showingImagePicker: $showingImagePicker)
                 .navigationTitle("Vision Board")
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
@@ -25,7 +26,7 @@ struct ContentView: View {
                     
                     ToolbarItem(placement: .primaryAction) {
                         Button(action: {
-                            viewModel.addImageItem()
+                            showingImagePicker = true
                         }) {
                             Label("Add Image", systemImage: "photo.badge.plus")
                         }

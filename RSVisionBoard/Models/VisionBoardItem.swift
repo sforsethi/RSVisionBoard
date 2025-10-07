@@ -20,4 +20,5 @@ struct VisionBoardItem: Identifiable, Hashable {
     var imageData: Data? = nil
     var position: CGSize = .zero
     var size: CGSize = CGSize(width: 200, height: 100)
+    var scale: CGFloat = 1.0
 }
