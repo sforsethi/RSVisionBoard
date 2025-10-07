@@ -22,6 +22,8 @@ struct VisionBoardCanvas: View {
     @State private var draggedItem: VisionBoardItem?
     @Binding var showingImagePicker: Bool
     @State private var inputImage: UIImage?
+    @State private var showingImageEffects = false
+    @State private var selectedImageForEffects: UIImage?
     @State private var dragOffset: CGSize = .zero
     @State private var isDragging: Bool = false
     
@@ -45,26 +47,44 @@ struct VisionBoardCanvas: View {
         .onChange(of: inputImage) { image in
             if let image = image {
                 print("📸 Image selected: \(image.size)")
-                
-                // Create a new vision board item with the image
-                let imageData = image.pngData()!
-                let originalSize = image.size
-                let scaledSize = CGSize(width: originalSize.width * 0.1, height: originalSize.height * 0.1)
-                
-                let newItem = VisionBoardItem(
-                    type: .image,
-                    text: "",
-                    imageData: imageData,
-                    position: CGSize(width: 100, height: 100),
-                    size: scaledSize,
-                    scale: 1.0
-                )
-                
-                viewModel.items.append(newItem)
-                print("✅ Added image to vision board")
+                selectedImageForEffects = image
+                showingImageEffects = true
                 inputImage = nil
             }
         }
+        .sheet(isPresented: $showingImageEffects) {
+            if let image = selectedImageForEffects {
+                ImageEffectsModal(
+                    originalImage: image,
+                    isPresented: $showingImageEffects
+                ) { editedImage in
+                    // Add the edited image to vision board
+                    addImageToVisionBoard(editedImage)
+                }
+            }
+        }
+    }
+    
+    private func addImageToVisionBoard(_ image: UIImage) {
+        print("📸 Adding edited image to vision board: \(image.size)")
+        
+        // Create a new vision board item with the image
+        let imageData = image.pngData()!
+        let originalSize = image.size
+        let scaledSize = CGSize(width: originalSize.width * 0.1, height: originalSize.height * 0.1)
+        
+        let newItem = VisionBoardItem(
+            type: .image,
+            text: "",
+            imageData: imageData,
+            position: CGSize(width: 100, height: 100),
+            size: scaledSize,
+            scale: 1.0
+        )
+        
+        viewModel.items.append(newItem)
+        print("✅ Added edited image to vision board")
+        selectedImageForEffects = nil
     }
     
     private var backgroundView: some View {

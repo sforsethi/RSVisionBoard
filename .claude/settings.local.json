@@ -4,7 +4,8 @@
       "Bash(xcodebuild:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Read(//Users/raghavsethi/Downloads/ApplyingVisualEffectsToForegroundSubjects/**)"
+      "Read(//Users/raghavsethi/Downloads/ApplyingVisualEffectsToForegroundSubjects/**)",
+      "Read(//Users/raghavsethi/Downloads/**)"
     ],
     "deny": [],
     "ask": []
