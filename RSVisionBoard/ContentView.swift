@@ -10,6 +10,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var viewModel = VisionBoardViewModel()
     @State private var showingImagePicker = false
+    @State private var showingElementsPicker = false
     
     var body: some View {
         NavigationView {
@@ -31,6 +32,17 @@ struct ContentView: View {
                             Label("Add Image", systemImage: "photo.badge.plus")
                         }
                     }
+                    
+                    ToolbarItem(placement: .primaryAction) {
+                        Button(action: {
+                            showingElementsPicker = true
+                        }) {
+                            Label("Add Elements", systemImage: "square.grid.2x2")
+                        }
+                    }
+                }
+                .sheet(isPresented: $showingElementsPicker) {
+                    ElementsPickerView(viewModel: viewModel)
                 }
         }
     }
