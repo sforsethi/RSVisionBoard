@@ -19,6 +19,67 @@ class VisionBoardViewModel: ObservableObject {
     @Published var items: [VisionBoardItem] = []
     @Published var shouldShowImagePicker = false
     
+    init() {
+        addDefaultVisionImage()
+    }
+    
+    #if os(iOS)
+    func addDefaultVisionImage() {
+        if let image = UIImage(named: "vision") {
+            print("✅ Loaded default vision image from Assets")
+            let imageData = image.pngData()
+            let originalSize = image.size
+            
+            // Scale to 30% of original for a nice default size
+            let scaledSize = CGSize(
+                width: originalSize.width * 0.3,
+                height: originalSize.height * 0.3
+            )
+            
+            // Calculate center position (adjusting for screen size)
+            let screenWidth = UIScreen.main.bounds.width
+            let screenHeight = UIScreen.main.bounds.height
+            let centerPosition = CGSize(
+                width: (screenWidth - scaledSize.width) / 2,
+                height: (screenHeight - scaledSize.height - 200) / 2 // 200 is roughly the nav bar + toolbar height
+            )
+            
+            let defaultItem = VisionBoardItem(
+                type: .image,
+                text: "",
+                imageData: imageData,
+                position: centerPosition,
+                size: scaledSize,
+                scale: 1.0
+            )
+            
+            // Insert at beginning to ensure it's rendered first (before other items)
+            items.insert(defaultItem, at: 0)
+            print("✅ Added default vision image to center of board")
+        } else {
+            print("❌ Could not load 'vision' image from Assets")
+        }
+    }
+    #else
+    func addDefaultVisionImage() {
+        // For macOS, use a default center position
+        let defaultSize = CGSize(width: 200, height: 200)
+        let centerPosition = CGSize(width: 300, height: 200)
+        
+        let defaultItem = VisionBoardItem(
+            type: .image,
+            text: "Vision",
+            imageData: nil,
+            position: centerPosition,
+            size: defaultSize,
+            scale: 1.0
+        )
+        
+        items.append(defaultItem)
+        print("✅ Added default placeholder for macOS")
+    }
+    #endif
+    
     func updateItem(_ item: VisionBoardItem) {
         if let index = items.firstIndex(where: { $0.id == item.id }) {
             items[index] = item

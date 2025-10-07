@@ -22,6 +22,8 @@ struct VisionBoardCanvas: View {
     @State private var draggedItem: VisionBoardItem?
     @Binding var showingImagePicker: Bool
     @State private var inputImage: UIImage?
+    @State private var dragOffset: CGSize = .zero
+    @State private var isDragging: Bool = false
     
     var body: some View {
         GeometryReader { geometry in
@@ -71,36 +73,77 @@ struct VisionBoardCanvas: View {
     }
     
     private var itemsContent: some View {
-        ForEach(viewModel.items) { item in
-            itemView(item)
+        // Separate vision image (first item if it has imageData) and other items
+        let visionItem = viewModel.items.first { $0.imageData != nil && $0.type == .image }
+        let otherItems = viewModel.items.filter { $0.id != visionItem?.id }
+        
+        return ZStack {
+            // Render other items first
+            ForEach(otherItems) { item in
+                itemView(item)
+            }
+            
+            // Always render vision image on top
+            if let visionItem = visionItem {
+                itemView(visionItem)
+                    .zIndex(999) // Ensure it's always on top
+            }
         }
     }
     
     private func itemView(_ item: VisionBoardItem) -> some View {
-        let itemCenter = CGPoint(
+        let basePosition = CGPoint(
             x: item.position.width + item.size.width / 2,
             y: item.position.height + item.size.height / 2
         )
+        
+        // Check if this is the default vision image (first image with data)
+        let isVisionImage = item.id == viewModel.items.first(where: { $0.imageData != nil })?.id
+        
+        // Apply drag offset if this is the item being dragged (but not vision image)
+        let currentPosition: CGPoint
+        if isDragging && draggedItem?.id == item.id && !isVisionImage {
+            currentPosition = CGPoint(
+                x: basePosition.x + dragOffset.width,
+                y: basePosition.y + dragOffset.height
+            )
+        } else {
+            currentPosition = basePosition
+        }
         
         return VisionBoardItemView(
             item: item,
             viewModel: viewModel
         )
-        .position(itemCenter)
+        .position(currentPosition)
         .id(item.id) // Force view refresh when item changes
+        .allowsHitTesting(!isVisionImage) // Disable hit testing for vision image
         .gesture(
-            DragGesture()
+            // Only add drag gesture if it's not the vision image
+            !isVisionImage ? DragGesture()
                 .onChanged { value in
-                    draggedItem = item
-                    viewModel.moveItem(item, to: CGSize(
-                        width: value.startLocation.x + value.translation.width - item.size.width / 2,
-                        height: value.startLocation.y + value.translation.height - item.size.height / 2
-                    ))
+                    if !isDragging {
+                        isDragging = true
+                        draggedItem = item
+                    }
+                    dragOffset = value.translation
                 }
-                .onEnded { _ in
+                .onEnded { value in
+                    // Update the actual position in the viewModel
+                    let newPosition = CGSize(
+                        width: item.position.width + value.translation.width,
+                        height: item.position.height + value.translation.height
+                    )
+                    viewModel.moveItem(item, to: newPosition)
+                    
+                    // Reset drag state
+                    isDragging = false
                     draggedItem = nil
+                    dragOffset = .zero
                 }
+            : nil
         )
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: currentPosition)
     }
 }
 
