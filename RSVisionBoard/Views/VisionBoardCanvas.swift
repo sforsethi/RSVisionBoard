@@ -113,7 +113,8 @@ struct VisionBoardCanvas: View {
         
         return VisionBoardItemView(
             item: item,
-            viewModel: viewModel
+            viewModel: viewModel,
+            isVisionImage: isVisionImage
         )
         .position(currentPosition)
         .id(item.id) // Force view refresh when item changes
@@ -150,28 +151,47 @@ struct VisionBoardCanvas: View {
 struct VisionBoardItemView: View {
     let item: VisionBoardItem
     let viewModel: VisionBoardViewModel
+    let isVisionImage: Bool
     @State private var isEditing: Bool = false
     @State private var tempText: String = ""
     @State private var currentScale: CGFloat = 1.0
+    @State private var currentRotation: Double = 0.0
     
     var body: some View {
         textOrImageContent
             .shadow(color: .black.opacity(0.1), radius: 2, x: 1, y: 1)
             .id(item.imageData == nil ? "\(item.id)-empty" : "\(item.id)-filled")
             .scaleEffect(item.type == .image ? currentScale : 1.0)
+            .rotationEffect(.degrees(currentRotation))
             .gesture(
-                item.type == .image ? 
-                MagnificationGesture()
-                    .onChanged { value in
-                        currentScale = value
-                    }
-                    .onEnded { _ in
-                        viewModel.scaleItem(item, by: currentScale)
-                    }
+                // Only add gestures if it's not the vision image
+                !isVisionImage ? 
+                // Combine rotation and scale gestures
+                SimultaneousGesture(
+                    // Rotation gesture for all items (except vision image)
+                    RotationGesture()
+                        .onChanged { angle in
+                            currentRotation = angle.degrees
+                        }
+                        .onEnded { _ in
+                            viewModel.rotateItem(item, to: currentRotation)
+                        },
+                    // Scale gesture only for images
+                    item.type == .image ? 
+                    MagnificationGesture()
+                        .onChanged { value in
+                            currentScale = value
+                        }
+                        .onEnded { _ in
+                            viewModel.scaleItem(item, by: currentScale)
+                        }
+                    : nil
+                )
                 : nil
             )
             .onAppear {
                 currentScale = item.scale
+                currentRotation = item.rotation
                 print("🎨 VisionBoardItemView appeared for item: \(item.id), type: \(item.type), hasImage: \(item.imageData != nil)")
             }
     }
@@ -202,6 +222,7 @@ struct VisionBoardItemView: View {
             }
             isEditing = false
         })
+        .font(.custom("Zapfino", size: 16))
         .textFieldStyle(RoundedBorderTextFieldStyle())
         .frame(width: item.size.width, height: item.size.height)
         .background(Color.yellow.opacity(0.2))
@@ -210,6 +231,7 @@ struct VisionBoardItemView: View {
     
     private var textView: some View {
         Text(item.text)
+            .font(.custom("Zapfino", size: 16))
             .frame(width: item.size.width, height: item.size.height)
             .background(Color.yellow.opacity(0.1))
             .cornerRadius(8)

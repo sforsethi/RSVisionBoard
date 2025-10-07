@@ -21,4 +21,5 @@ struct VisionBoardItem: Identifiable, Hashable {
     var position: CGSize = .zero
     var size: CGSize = CGSize(width: 200, height: 100)
     var scale: CGFloat = 1.0
+    var rotation: Double = 0.0 // Rotation in degrees
 }

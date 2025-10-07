@@ -172,4 +172,10 @@ class VisionBoardViewModel: ObservableObject {
             items[index].scale = scale
         }
     }
+    
+    func rotateItem(_ item: VisionBoardItem, to rotation: Double) {
+        if let index = items.firstIndex(where: { $0.id == item.id }) {
+            items[index].rotation = rotation
+        }
+    }
 }
