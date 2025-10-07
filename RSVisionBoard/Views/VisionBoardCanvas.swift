@@ -255,10 +255,6 @@ struct VisionBoardItemView: View {
             .frame(width: item.size.width, height: item.size.height)
             .background(Color.yellow.opacity(0.1))
             .cornerRadius(8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-            )
             .onTapGesture {
                 tempText = item.text
                 isEditing = true
@@ -284,10 +280,6 @@ struct VisionBoardItemView: View {
                     .aspectRatio(contentMode: .fill)
                     .frame(width: item.size.width, height: item.size.height)
                     .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                    )
                     .onAppear {
                         print("🎨 Rendering image for item \(item.id): size=\(uiImage.size)")
                     }
@@ -308,10 +300,6 @@ struct VisionBoardItemView: View {
                     .aspectRatio(contentMode: .fill)
                     .frame(width: item.size.width, height: item.size.height)
                     .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                    )
             } else {
                 Color.clear
             }

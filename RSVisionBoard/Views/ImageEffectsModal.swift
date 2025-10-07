@@ -28,8 +28,16 @@ struct ImageEffectsModal: View {
     @State private var gradientStartColor: Color = .blue
     @State private var gradientEndColor: Color = .purple
     @State private var activeTab: Tab = .image
+    @State private var previewImage: UIImage = UIImage()
     @Environment(\.dismiss) private var dismiss
     let onImageEdited: (UIImage) -> Void
+
+    init(originalImage: UIImage, isPresented: Binding<Bool>, onImageEdited: @escaping (UIImage) -> Void) {
+        self.originalImage = originalImage
+        self._isPresented = isPresented
+        self.onImageEdited = onImageEdited
+        _previewImage = State(initialValue: originalImage)
+    }
     
     var body: some View {
         NavigationView {
@@ -80,6 +88,18 @@ struct ImageEffectsModal: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .onAppear {
+            refreshPreview()
+        }
+        .onChange(of: selectedEffect) { _ in
+            refreshPreview()
+        }
+        .onChange(of: selectedBackgroundEffect) { _ in
+            refreshPreview()
+        }
+        .onChange(of: intensity) { _ in
+            refreshPreview()
+        }
     }
     
     private var imagePreview: some View {
@@ -88,7 +108,7 @@ struct ImageEffectsModal: View {
             backgroundView
             
             // Image with effects
-            Image(uiImage: applyEffect(to: originalImage))
+            Image(uiImage: previewImage)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .cornerRadius(8)
@@ -118,7 +138,7 @@ struct ImageEffectsModal: View {
             case .noise:
                 Color.white
             case .transparent:
-                Color.clear
+                TransparencyBackgroundView()
             }
         }
     }
@@ -187,6 +207,7 @@ struct ImageEffectsModal: View {
                         colors: getBackgroundColors(for: effect)
                     ) {
                         selectedBackgroundEffect = effect
+                        refreshPreview()
                     }
                 }
             }
@@ -222,6 +243,7 @@ struct ImageEffectsModal: View {
                                          backgroundColor == .green ? .red :
                                          backgroundColor == .red ? .yellow :
                                          backgroundColor == .yellow ? .purple : .white
+                        refreshPreview()
                     }
                 
                 Text("Tap to change color")
@@ -252,6 +274,7 @@ struct ImageEffectsModal: View {
                                               gradientStartColor == .red ? .yellow :
                                               gradientStartColor == .yellow ? .purple :
                                               gradientStartColor == .purple ? .pink : .blue
+                            refreshPreview()
                         }
                     
                     Text("Start")
@@ -273,6 +296,7 @@ struct ImageEffectsModal: View {
                                              gradientEndColor == .yellow ? .red :
                                              gradientEndColor == .red ? .green :
                                              gradientEndColor == .green ? .blue : .purple
+                            refreshPreview()
                         }
                     
                     Text("End")
@@ -375,6 +399,10 @@ struct ImageEffectsModal: View {
         let editedImage = applyEffectWithBackground(to: originalImage)
         onImageEdited(editedImage)
         dismiss()
+    }
+
+    private func refreshPreview() {
+        previewImage = applyEffectWithBackground(to: originalImage)
     }
 
     private func backgroundCIImage(for effect: BackgroundEffect, extent: CGRect) -> CIImage? {
@@ -823,6 +851,30 @@ struct BackgroundDotsPatternView: View {
                 }
             }
         }
+    }
+}
+
+struct TransparencyBackgroundView: View {
+    var body: some View {
+        Canvas { context, size in
+            let square: CGFloat = 12
+            let light = Color.white
+            let dark = Color.gray.opacity(0.25)
+            var y: CGFloat = 0
+            while y < size.height {
+                var x: CGFloat = 0
+                while x < size.width {
+                    let isLight = ((Int(x / square) + Int(y / square)) % 2) == 0
+                    context.fill(
+                        Path(CGRect(x: x, y: y, width: square, height: square)),
+                        with: .color(isLight ? light : dark)
+                    )
+                    x += square
+                }
+                y += square
+            }
+        }
+        .clipped()
     }
 }
 
