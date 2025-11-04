@@ -93,12 +93,15 @@ struct ContentView: View {
     }
 
     private func prepareShareImage() {
-        let renderer = ImageRenderer(
-            content: VisionBoardCanvas(
-                viewModel: viewModel,
-                showingImagePicker: .constant(false)
-            )
+        let boardSize = UIScreen.main.bounds.size
+        let snapshot = VisionBoardCanvas(
+            viewModel: viewModel,
+            showingImagePicker: .constant(false)
         )
+        .frame(width: boardSize.width, height: boardSize.height)
+
+        let renderer = ImageRenderer(content: snapshot)
+        renderer.proposedSize = ProposedViewSize(boardSize)
         renderer.scale = UIScreen.main.scale
         if let rendered = renderer.uiImage {
             shareImage = rendered

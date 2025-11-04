@@ -19,13 +19,10 @@ import UniformTypeIdentifiers
 
 struct VisionBoardCanvas: View {
     @ObservedObject var viewModel: VisionBoardViewModel
-    @State private var draggedItem: VisionBoardItem?
     @Binding var showingImagePicker: Bool
     @State private var inputImage: UIImage?
     @State private var showingImageEffects = false
     @State private var selectedImageForEffects: UIImage?
-    @State private var dragOffset: CGSize = .zero
-    @State private var isDragging: Bool = false
     
     var body: some View {
         GeometryReader { geometry in
@@ -112,59 +109,101 @@ struct VisionBoardCanvas: View {
     }
     
     private func itemView(_ item: VisionBoardItem) -> some View {
-        let basePosition = CGPoint(
-            x: item.position.width + item.size.width / 2,
-            y: item.position.height + item.size.height / 2
-        )
-        
-        // Check if this is the default vision image (first image with data)
         let isVisionImage = item.id == viewModel.items.first(where: { $0.imageData != nil })?.id
-        
-        // Apply drag offset if this is the item being dragged (but not vision image)
-        let currentPosition: CGPoint
-        if isDragging && draggedItem?.id == item.id && !isVisionImage {
-            currentPosition = CGPoint(
-                x: basePosition.x + dragOffset.width,
-                y: basePosition.y + dragOffset.height
-            )
-        } else {
-            currentPosition = basePosition
-        }
-        
-        return VisionBoardItemView(
+        return CanvasItemView(
             item: item,
             viewModel: viewModel,
             isVisionImage: isVisionImage
         )
-        .position(currentPosition)
-        .id(item.id) // Force view refresh when item changes
-        .allowsHitTesting(!isVisionImage) // Disable hit testing for vision image
-        .gesture(
-            // Only add drag gesture if it's not the vision image
-            !isVisionImage ? DragGesture()
-                .onChanged { value in
-                    if !isDragging {
-                        isDragging = true
-                        draggedItem = item
-                    }
-                    dragOffset = value.translation
-                }
-                .onEnded { value in
-                    // Update the actual position in the viewModel
-                    let newPosition = CGSize(
-                        width: item.position.width + value.translation.width,
-                        height: item.position.height + value.translation.height
-                    )
-                    viewModel.moveItem(item, to: newPosition)
-                    
-                    // Reset drag state
-                    isDragging = false
-                    draggedItem = nil
-                    dragOffset = .zero
-                }
-            : nil
+        .frame(width: item.size.width, height: item.size.height)
+        .id(item.id)
+        .allowsHitTesting(!isVisionImage)
+    }
+}
+
+private struct CanvasItemView: View {
+    let item: VisionBoardItem
+    let viewModel: VisionBoardViewModel
+    let isVisionImage: Bool
+    @GestureState private var dragOffset: CGSize = .zero
+#if os(iOS)
+    @GestureState private var pinchScale: CGFloat = 1.0
+    @GestureState private var rotationAngle: Angle = .zero
+#endif
+    
+    private var basePosition: CGPoint {
+        CGPoint(
+            x: item.position.width + item.size.width / 2,
+            y: item.position.height + item.size.height / 2
         )
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: currentPosition)
+    }
+    
+    private var currentPosition: CGPoint {
+        CGPoint(
+            x: basePosition.x + dragOffset.width,
+            y: basePosition.y + dragOffset.height
+        )
+    }
+    
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .updating($dragOffset) { value, state, _ in
+                state = value.translation
+            }
+            .onEnded { value in
+                let newPosition = CGSize(
+                    width: item.position.width + value.translation.width,
+                    height: item.position.height + value.translation.height
+                )
+                viewModel.moveItem(item, to: newPosition)
+            }
+    }
+    
+#if os(iOS)
+    private var pinchGesture: some Gesture {
+        MagnificationGesture()
+            .updating($pinchScale) { value, state, _ in
+                guard item.type == .image, !isVisionImage else { return }
+                state = value
+            }
+            .onEnded { value in
+                guard item.type == .image, !isVisionImage else { return }
+                let newScale = max(0.2, min(5.0, item.scale * value))
+                viewModel.scaleItem(item, by: newScale)
+            }
+    }
+    
+    private var rotationGesture: some Gesture {
+        RotationGesture()
+            .updating($rotationAngle) { value, state, _ in
+                guard !isVisionImage else { return }
+                state = value
+            }
+            .onEnded { value in
+                guard !isVisionImage else { return }
+                let newRotation = item.rotation + value.degrees
+                viewModel.rotateItem(item, to: newRotation)
+            }
+    }
+#endif
+    
+    var body: some View {
+        VisionBoardItemView(
+            item: item,
+            viewModel: viewModel,
+            isVisionImage: isVisionImage
+        )
+#if os(iOS)
+        .scaleEffect(item.type == .image && !isVisionImage ? item.scale * pinchScale : 1.0)
+        .rotationEffect(.degrees(item.rotation + rotationAngle.degrees))
+#endif
+        .position(currentPosition)
+        .animation(nil, value: currentPosition)
+        .gesture(isVisionImage ? nil : dragGesture)
+#if os(iOS)
+        .simultaneousGesture(pinchGesture)
+        .simultaneousGesture(rotationGesture)
+#endif
     }
 }
 
@@ -174,21 +213,21 @@ struct VisionBoardItemView: View {
     let isVisionImage: Bool
     @State private var isEditing: Bool = false
     @State private var tempText: String = ""
+#if !os(iOS)
     @State private var currentScale: CGFloat = 1.0
     @State private var currentRotation: Double = 0.0
+#endif
     
     var body: some View {
         textOrImageContent
             .shadow(color: .black.opacity(0.1), radius: 2, x: 1, y: 1)
             .id(item.imageData == nil ? "\(item.id)-empty" : "\(item.id)-filled")
+#if !os(iOS)
             .scaleEffect(item.type == .image ? currentScale : 1.0)
             .rotationEffect(.degrees(currentRotation))
             .gesture(
-                // Only add gestures if it's not the vision image
-                !isVisionImage ? 
-                // Combine rotation and scale gestures
+                !isVisionImage ?
                 SimultaneousGesture(
-                    // Rotation gesture for all items (except vision image)
                     RotationGesture()
                         .onChanged { angle in
                             currentRotation = angle.degrees
@@ -196,8 +235,7 @@ struct VisionBoardItemView: View {
                         .onEnded { _ in
                             viewModel.rotateItem(item, to: currentRotation)
                         },
-                    // Scale gesture only for images
-                    item.type == .image ? 
+                    item.type == .image ?
                     MagnificationGesture()
                         .onChanged { value in
                             currentScale = value
@@ -209,9 +247,12 @@ struct VisionBoardItemView: View {
                 )
                 : nil
             )
+#endif
             .onAppear {
+#if !os(iOS)
                 currentScale = item.scale
                 currentRotation = item.rotation
+#endif
                 print("🎨 VisionBoardItemView appeared for item: \(item.id), type: \(item.type), hasImage: \(item.imageData != nil)")
             }
     }
@@ -384,6 +425,7 @@ extension UIImage {
     }
 }
 #endif
+
 #else
 extension NSImage {
     func resized(to size: CGSize) -> NSImage {
